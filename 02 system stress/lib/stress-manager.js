@@ -5,8 +5,27 @@ import { Worker } from "node:worker_threads";
 
 const STORAGE_DIR = join(process.cwd(), "stress-storage");
 
-function workerPath(filename) {
-  return join(process.cwd(), "lib", filename);
+const CPU_WORKER_CODE = `
+const { parentPort } = require("node:worker_threads");
+while (parentPort) {
+  let total = 0;
+  for (let i = 0; i < 8000000; i += 1) {
+    total += Math.sqrt(i) * Math.sin(i);
+  }
+  parentPort.postMessage({ total });
+}
+`;
+
+const THREAD_WORKER_CODE = `
+const { parentPort } = require("node:worker_threads");
+parentPort.on("message", (message) => {
+  if (message === "stop") process.exit(0);
+});
+setInterval(() => {}, 2147483647);
+`;
+
+function createWorker(code) {
+  return new Worker(code, { eval: true });
 }
 
 class StressManager {
@@ -15,6 +34,7 @@ class StressManager {
     this.memoryChunks = [];
     this.storageFiles = [];
     this.threadWorkers = [];
+    this.lastError = null;
     this.active = {
       cpu: false,
       memory: false,
@@ -32,6 +52,7 @@ class StressManager {
       memoryAllocatedMB: 0,
       storageAllocatedMB: 0,
       storageFiles: 0,
+      threadWorkersSpawned: 0,
     };
   }
 
@@ -40,19 +61,22 @@ class StressManager {
       active: { ...this.active },
       config: { ...this.config },
       stats: { ...this.stats },
+      lastError: this.lastError,
     };
   }
 
   startCpu(workerCount = os.cpus().length) {
     this.stopCpu();
+    this.lastError = null;
 
     const count = Math.max(1, Math.min(workerCount, os.cpus().length));
     this.cpuWorkers = Array.from({ length: count }, () => {
-      const worker = new Worker(workerPath("cpu-worker.js"));
+      const worker = createWorker(CPU_WORKER_CODE);
       worker.on("message", () => {
         this.stats.loopsCompleted += 1;
       });
-      worker.on("error", () => {
+      worker.on("error", (error) => {
+        this.lastError = error.message;
         this.active.cpu = false;
       });
       return worker;
@@ -73,6 +97,7 @@ class StressManager {
 
   startMemory(targetMB = 512) {
     this.stopMemory();
+    this.lastError = null;
 
     const chunkSize = 8 * 1024 * 1024;
     const chunksNeeded = Math.ceil((targetMB * 1024 * 1024) / chunkSize);
@@ -95,6 +120,7 @@ class StressManager {
 
   async startStorage(targetMB = 512) {
     await this.stopStorage();
+    this.lastError = null;
 
     await mkdir(STORAGE_DIR, { recursive: true });
 
@@ -135,40 +161,63 @@ class StressManager {
     }
   }
 
-  startThreads(workerCount = 100) {
-    this.stopThreads();
+  async startThreads(workerCount = 100) {
+    await this.stopThreads();
+    this.lastError = null;
 
-    const count = Math.max(1, Math.min(workerCount, 500));
-    this.threadWorkers = Array.from(
-      { length: count },
-      () => new Worker(workerPath("thread-worker.js"))
-    );
+    const count = Math.max(1, Math.min(workerCount, 200));
+    const batchSize = 25;
+    const workers = [];
 
-    this.active.threads = true;
-    this.config.threadWorkers = count;
+    for (let index = 0; index < count; index += batchSize) {
+      const end = Math.min(index + batchSize, count);
+
+      for (let workerIndex = index; workerIndex < end; workerIndex += 1) {
+        try {
+          const worker = createWorker(THREAD_WORKER_CODE);
+          worker.on("error", (error) => {
+            this.lastError = error.message;
+          });
+          workers.push(worker);
+        } catch (error) {
+          this.lastError = error.message;
+          throw error;
+        }
+      }
+
+      this.threadWorkers = workers;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    this.active.threads = workers.length > 0;
+    this.config.threadWorkers = workers.length;
+    this.stats.threadWorkersSpawned = workers.length;
   }
 
-  stopThreads() {
+  async stopThreads() {
     for (const worker of this.threadWorkers) {
       worker.postMessage("stop");
-      worker.terminate().catch(() => {});
+      await worker.terminate().catch(() => {});
     }
 
     this.threadWorkers = [];
     this.active.threads = false;
     this.config.threadWorkers = 0;
+    this.stats.threadWorkersSpawned = 0;
   }
 
   async stopAll() {
     this.stopCpu();
     this.stopMemory();
     await this.stopStorage();
-    this.stopThreads();
+    await this.stopThreads();
+    this.lastError = null;
     this.stats = {
       loopsCompleted: 0,
       memoryAllocatedMB: 0,
       storageAllocatedMB: 0,
       storageFiles: 0,
+      threadWorkersSpawned: 0,
     };
   }
 }

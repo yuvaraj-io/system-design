@@ -16,7 +16,7 @@ export async function POST(request) {
       if (type === "cpu") stressManager.stopCpu();
       if (type === "memory") stressManager.stopMemory();
       if (type === "storage") await stressManager.stopStorage();
-      if (type === "threads") stressManager.stopThreads();
+      if (type === "threads") await stressManager.stopThreads();
 
       return Response.json({ ok: true, stress: stressManager.getStatus() });
     }
@@ -25,7 +25,7 @@ export async function POST(request) {
       if (type === "cpu") stressManager.startCpu(Number(value) || undefined);
       if (type === "memory") stressManager.startMemory(Number(value) || 512);
       if (type === "storage") await stressManager.startStorage(Number(value) || 512);
-      if (type === "threads") stressManager.startThreads(Number(value) || 100);
+      if (type === "threads") await stressManager.startThreads(Number(value) || 100);
 
       return Response.json({ ok: true, stress: stressManager.getStatus() });
     }

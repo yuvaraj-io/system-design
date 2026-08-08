@@ -68,6 +68,7 @@ export default function HomePage() {
   const [error, setError] = useState(false);
   const [settings, setSettings] = useState(DEFAULTS);
   const [busy, setBusy] = useState(false);
+  const [baselineThreads, setBaselineThreads] = useState(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -76,13 +77,18 @@ export default function HomePage() {
 
       const nextData = await response.json();
       setData(nextData);
+
+      if (baselineThreads == null && nextData.threads.processThreadCount != null) {
+        setBaselineThreads(nextData.threads.processThreadCount);
+      }
+
       setStatus(`Live metrics every ${REFRESH_MS / 1000}s`);
       setError(false);
     } catch (err) {
       setStatus(`Failed to load metrics: ${err.message}`);
       setError(true);
     }
-  }, []);
+  }, [baselineThreads]);
 
   useEffect(() => {
     refresh();
@@ -99,7 +105,10 @@ export default function HomePage() {
         body: JSON.stringify({ action, type, value }),
       });
 
-      if (!response.ok) throw new Error(`Stress request failed (${response.status})`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || body.error || `Stress request failed (${response.status})`);
+      }
       await refresh();
     } catch (err) {
       setStatus(err.message);
@@ -110,6 +119,11 @@ export default function HomePage() {
   }
 
   const stress = data?.stress;
+  const processThreads = data?.threads.processThreadCount;
+  const threadDelta =
+    baselineThreads != null && processThreads != null
+      ? processThreads - baselineThreads
+      : null;
 
   return (
     <main className="app">
@@ -173,7 +187,7 @@ export default function HomePage() {
               active={stress?.active.threads}
               value={settings.threads}
               min={10}
-              max={500}
+              max={200}
               step={10}
               unit="worker threads"
               onChange={(value) => setSettings((prev) => ({ ...prev, threads: value }))}
@@ -245,13 +259,27 @@ export default function HomePage() {
             </div>
 
             <div className="metric-card">
-              <h3>Active threads</h3>
+              <h3>Threads</h3>
               <p className="metric-value">
+                {processThreads == null ? "N/A" : processThreads.toLocaleString()}
+              </p>
+              <p className="metric-sub">
+                Threads in this Node app
+                {threadDelta != null && threadDelta !== 0
+                  ? ` (${threadDelta > 0 ? "+" : ""}${threadDelta} since page load)`
+                  : ""}
+              </p>
+              <p className="metric-sub">
+                System-wide:{" "}
                 {data?.threads.systemThreadCount == null
                   ? "N/A"
                   : data.threads.systemThreadCount.toLocaleString()}
               </p>
-              <p className="metric-sub">Live threads across the whole system</p>
+              <p className="metric-sub">
+                {stress?.stats.threadWorkersSpawned
+                  ? `Stress workers running: ${stress.stats.threadWorkersSpawned}`
+                  : "No stress workers running"}
+              </p>
             </div>
           </div>
 
@@ -269,8 +297,8 @@ export default function HomePage() {
               <strong>{stress?.stats.storageAllocatedMB ?? 0} MB</strong>
             </div>
             <div>
-              <span>Storage files created</span>
-              <strong>{stress?.stats.storageFiles ?? 0}</strong>
+              <span>Thread workers spawned</span>
+              <strong>{stress?.stats.threadWorkersSpawned ?? 0}</strong>
             </div>
           </div>
         </section>

@@ -119,14 +119,30 @@ async function getSystemThreadCount() {
   }
 }
 
+async function getProcessThreadCount() {
+  try {
+    if (process.platform === "darwin" || process.platform === "linux") {
+      const { stdout } = await execFileAsync("ps", ["-M", String(process.pid)]);
+      const lines = stdout.trim().split("\n").filter(Boolean);
+      return Math.max(0, lines.length - 1);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getThreadInfo() {
-  const [systemThreadCount, activeHandles] = await Promise.all([
+  const [systemThreadCount, processThreadCount, activeHandles] = await Promise.all([
     getSystemThreadCount(),
+    getProcessThreadCount(),
     Promise.resolve(process._getActiveHandles?.().length ?? null),
   ]);
 
   return {
     systemThreadCount,
+    processThreadCount,
     nodeProcessActiveHandles: activeHandles,
     nodeProcessActiveRequests: process._getActiveRequests?.().length ?? null,
   };

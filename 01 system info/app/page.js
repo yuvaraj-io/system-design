@@ -139,12 +139,20 @@ export default function HomePage() {
         <article className="card">
           <h2>Threads</h2>
           <p className="metric">
-            {data?.threads.systemThreadCount == null
+            {data?.threads.processThreadCount == null
               ? "N/A"
-              : data.threads.systemThreadCount.toLocaleString()}
+              : data.threads.processThreadCount.toLocaleString()}
           </p>
-          <p className="label">system threads</p>
+          <p className="label">threads in this app</p>
           <div className="thread-stats">
+            <div>
+              <span className="stat-label">System-wide threads</span>
+              <span className="stat-value">
+                {data?.threads.systemThreadCount == null
+                  ? "N/A"
+                  : data.threads.systemThreadCount.toLocaleString()}
+              </span>
+            </div>
             <div>
               <span className="stat-label">Node active handles</span>
               <span className="stat-value">
