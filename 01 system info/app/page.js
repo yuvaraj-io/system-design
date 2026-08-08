@@ -117,7 +117,7 @@ export default function HomePage() {
         </article>
 
         <article className="card">
-          <h2>Disk</h2>
+          <h2>Storage</h2>
           <p className="metric">{data ? formatGB(data.disk.totalGB) : "—"}</p>
           <p className="label">{data ? `mount: ${data.disk.path}` : "—"}</p>
           <div className="util-block">

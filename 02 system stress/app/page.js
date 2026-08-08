@@ -1,0 +1,282 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+const REFRESH_MS = 1500;
+
+const DEFAULTS = {
+  cpu: 4,
+  memory: 512,
+  storage: 512,
+  threads: 100,
+};
+
+function formatPercent(value) {
+  return `${Number(value ?? 0).toFixed(1)}%`;
+}
+
+function formatGB(value) {
+  return `${Number(value ?? 0).toFixed(2)} GB`;
+}
+
+function UtilBar({ percent, variant }) {
+  const width = `${Math.min(100, Math.max(0, percent ?? 0))}%`;
+
+  return (
+    <div className="bar">
+      <div className={`bar-fill ${variant}`} style={{ width }} />
+    </div>
+  );
+}
+
+function StressControl({ title, active, value, min, max, step, unit, onChange, onStart, onStop }) {
+  return (
+    <div className="control">
+      <div className="control-head">
+        <strong>{title}</strong>
+        <span className={`badge ${active ? "on" : ""}`}>{active ? "Running" : "Idle"}</span>
+      </div>
+      <label htmlFor={`${title}-range`}>{unit}</label>
+      <input
+        id={`${title}-range`}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        disabled={active}
+      />
+      <p className="value-line">
+        {value} {unit}
+      </p>
+      <div className="actions">
+        <button className="primary" type="button" onClick={onStart} disabled={active}>
+          Start loop
+        </button>
+        <button className="secondary" type="button" onClick={onStop} disabled={!active}>
+          Stop
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState("Connecting…");
+  const [error, setError] = useState(false);
+  const [settings, setSettings] = useState(DEFAULTS);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/status");
+      if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+
+      const nextData = await response.json();
+      setData(nextData);
+      setStatus(`Live metrics every ${REFRESH_MS / 1000}s`);
+      setError(false);
+    } catch (err) {
+      setStatus(`Failed to load metrics: ${err.message}`);
+      setError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  async function runStress(action, type, value) {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/stress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, type, value }),
+      });
+
+      if (!response.ok) throw new Error(`Stress request failed (${response.status})`);
+      await refresh();
+    } catch (err) {
+      setStatus(err.message);
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const stress = data?.stress;
+
+  return (
+    <main className="app">
+      <header className="header">
+        <div>
+          <p className="eyebrow">Load generator</p>
+          <h1>System Stress</h1>
+        </div>
+        <div className="header-meta">
+          <span className="pill live">Live loops</span>
+          <span className="pill">{data?.hostname ?? "—"}</span>
+          <span className="pill muted">{data?.cores ?? "—"} cores</span>
+        </div>
+      </header>
+
+      <div className="layout">
+        <aside className="panel">
+          <h2>Stress controls</h2>
+          <div className="controls">
+            <StressControl
+              title="CPU"
+              active={stress?.active.cpu}
+              value={settings.cpu}
+              min={1}
+              max={data?.cores ?? 10}
+              step={1}
+              unit="worker loops"
+              onChange={(value) => setSettings((prev) => ({ ...prev, cpu: value }))}
+              onStart={() => runStress("start", "cpu", settings.cpu)}
+              onStop={() => runStress("stop", "cpu")}
+            />
+
+            <StressControl
+              title="Memory"
+              active={stress?.active.memory}
+              value={settings.memory}
+              min={128}
+              max={4096}
+              step={128}
+              unit="MB to allocate"
+              onChange={(value) => setSettings((prev) => ({ ...prev, memory: value }))}
+              onStart={() => runStress("start", "memory", settings.memory)}
+              onStop={() => runStress("stop", "memory")}
+            />
+
+            <StressControl
+              title="Storage"
+              active={stress?.active.storage}
+              value={settings.storage}
+              min={128}
+              max={8192}
+              step={128}
+              unit="MB to allocate on disk"
+              onChange={(value) => setSettings((prev) => ({ ...prev, storage: value }))}
+              onStart={() => runStress("start", "storage", settings.storage)}
+              onStop={() => runStress("stop", "storage")}
+            />
+
+            <StressControl
+              title="Threads"
+              active={stress?.active.threads}
+              value={settings.threads}
+              min={10}
+              max={500}
+              step={10}
+              unit="worker threads"
+              onChange={(value) => setSettings((prev) => ({ ...prev, threads: value }))}
+              onStart={() => runStress("start", "threads", settings.threads)}
+              onStop={() => runStress("stop", "threads")}
+            />
+          </div>
+
+          <button
+            className="danger"
+            type="button"
+            disabled={busy}
+            onClick={() => runStress("stop-all")}
+          >
+            Stop all stress loops
+          </button>
+        </aside>
+
+        <section className="card">
+          <h2>What is happening right now</h2>
+
+          <div className="metrics-grid">
+            <div className="metric-card">
+              <h3>CPU utilization</h3>
+              <p className="metric-value">
+                {data ? formatPercent(data.cpu.averageUtilizationPercent) : "—"}
+              </p>
+              <p className="metric-sub">Average across all cores</p>
+              <UtilBar percent={data?.cpu.averageUtilizationPercent} variant="cpu" />
+              <div className="core-list">
+                {(data?.cpu.perCore ?? []).map((core) => (
+                  <div className="core-item" key={core.core}>
+                    Core {core.core + 1}
+                    <strong>{formatPercent(core.utilizationPercent)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="metric-card">
+              <h3>Memory</h3>
+              <p className="metric-value">
+                {data ? formatGB(data.memory.usedGB) : "—"}
+              </p>
+              <p className="metric-sub">
+                {data
+                  ? `${formatPercent(data.memory.utilizationPercent)} of ${formatGB(data.memory.totalGB)}`
+                  : "—"}
+              </p>
+              <UtilBar percent={data?.memory.utilizationPercent} variant="memory" />
+            </div>
+
+            <div className="metric-card">
+              <h3>Storage</h3>
+              <p className="metric-value">
+                {data ? formatGB(data.disk.usedGB) : "—"}
+              </p>
+              <p className="metric-sub">
+                {data
+                  ? `${formatPercent(data.disk.utilizationPercent)} of ${formatGB(data.disk.totalGB)} on ${data.disk.path}`
+                  : "—"}
+              </p>
+              <UtilBar percent={data?.disk.utilizationPercent} variant="disk" />
+              <p className="metric-sub">
+                {stress?.stats.storageAllocatedMB
+                  ? `Stress app holding ${stress.stats.storageAllocatedMB} MB in ${stress.stats.storageFiles} files`
+                  : "No storage allocated by stress app"}
+              </p>
+            </div>
+
+            <div className="metric-card">
+              <h3>Active threads</h3>
+              <p className="metric-value">
+                {data?.threads.systemThreadCount == null
+                  ? "N/A"
+                  : data.threads.systemThreadCount.toLocaleString()}
+              </p>
+              <p className="metric-sub">Live threads across the whole system</p>
+            </div>
+          </div>
+
+          <div className="stress-stats">
+            <div>
+              <span>CPU loops completed</span>
+              <strong>{stress?.stats.loopsCompleted?.toLocaleString() ?? 0}</strong>
+            </div>
+            <div>
+              <span>Memory held by stress app</span>
+              <strong>{stress?.stats.memoryAllocatedMB ?? 0} MB</strong>
+            </div>
+            <div>
+              <span>Storage held by stress app</span>
+              <strong>{stress?.stats.storageAllocatedMB ?? 0} MB</strong>
+            </div>
+            <div>
+              <span>Storage files created</span>
+              <strong>{stress?.stats.storageFiles ?? 0}</strong>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <p className={`status ${error ? "error" : ""}`}>{status}</p>
+    </main>
+  );
+}
