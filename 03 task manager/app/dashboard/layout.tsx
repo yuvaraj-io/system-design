@@ -1,10 +1,12 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Activity } from "lucide-react";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Process Explorer",
-};
+import MemoryIcon from "@mui/icons-material/Memory";
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+import Link from "next/link";
 
 export default function DashboardLayout({
   children,
@@ -12,17 +14,27 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border bg-card/60 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link href="/dashboard" className="flex items-center gap-3 font-semibold">
-            <Activity className="h-5 w-5 text-accent" />
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+      <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Toolbar>
+          <MemoryIcon color="primary" sx={{ mr: 1 }} />
+          <Typography
+            component={Link}
+            href="/dashboard"
+            variant="h6"
+            color="text.primary"
+            sx={{ textDecoration: "none", fontWeight: 700 }}
+          >
             Process Explorer
-          </Link>
-          <span className="text-sm text-muted">Next.js full-stack monitor</span>
-        </div>
-      </div>
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
-    </div>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
+            Next.js + Material UI
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        {children}
+      </Container>
+    </Box>
   );
 }

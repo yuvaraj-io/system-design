@@ -1,23 +1,28 @@
-import { Activity } from "lucide-react";
+import MemoryIcon from "@mui/icons-material/Memory";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { ProcessDashboardClient } from "@/features/processes/components/process-dashboard-client";
 
 export function ProcessDashboard() {
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm uppercase tracking-[0.2em] text-accent">Phase 3</p>
-          <h1 className="mt-2 text-3xl font-semibold">Process Explorer</h1>
-          <p className="mt-2 max-w-2xl text-muted">
-            Search processes by PID, name, or user — with live metrics refreshing every second.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <Activity className="h-6 w-6 text-accent" />
-        </div>
-      </header>
+    <Stack spacing={3}>
+      <Stack direction="row" spacing={2} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+        <Box>
+          <Typography variant="overline" color="primary">
+            Phase 7
+          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+            Process Explorer
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 1, maxWidth: 720 }}>
+            Browse all processes by default, inspect details on click, and explore parent-child trees.
+          </Typography>
+        </Box>
+        <MemoryIcon color="primary" sx={{ fontSize: 40 }} />
+      </Stack>
 
       <ProcessDashboardClient />
-    </div>
+    </Stack>
   );
 }

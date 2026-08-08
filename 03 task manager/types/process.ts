@@ -36,6 +36,7 @@ export interface ProcessListSnapshot {
   timestamp: string;
   host: string;
   platform: NodeJS.Platform;
+  currentUser: string;
   sampleIntervalMs: number;
   processes: Process[];
 }

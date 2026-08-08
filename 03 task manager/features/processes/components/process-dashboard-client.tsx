@@ -1,73 +1,100 @@
 "use client";
 
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import TableRowsIcon from "@mui/icons-material/TableRows";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import Alert from "@mui/material/Alert";
+import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
+import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import { ProcessFilters } from "@/features/processes/components/process-filters";
 import { ProcessSearchBar } from "@/features/processes/components/process-search-bar";
 import { ProcessTable } from "@/features/processes/components/process-table";
+import { useProcessFilters } from "@/features/processes/hooks/use-process-filters";
 import { useProcessesQuery } from "@/features/processes/hooks/use-processes-query";
-import { useProcessSearch } from "@/features/processes/hooks/use-process-search";
+import { ProcessTreeView } from "@/features/process-tree/components/process-tree-view";
+import { ProcessDetailDrawer } from "@/features/process-detail/components/process-detail-drawer";
+import { useUiStore } from "@/store/ui.store";
 import { formatNumber } from "@/utils/format";
 
 export function ProcessDashboardClient() {
   const { data, isLoading, isError, error, isFetching, dataUpdatedAt } =
     useProcessesQuery();
 
+  const viewMode = useUiStore((state) => state.viewMode);
+  const setViewMode = useUiStore((state) => state.setViewMode);
+
   const {
-    debouncedQuery,
+    debouncedSearch,
     filteredProcesses,
     matchedCount,
     totalCount,
-    isFiltering,
-  } = useProcessSearch(data?.processes ?? []);
+    hasActiveFilters,
+  } = useProcessFilters(data?.processes ?? [], data?.currentUser ?? "");
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-6 text-muted">
-        <LoaderCircle className="h-5 w-5 animate-spin" />
-        Loading processes from the OS...
-      </div>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "center", p: 3 }}>
+        <CircularProgress size={22} />
+        <Typography color="text.secondary">Loading processes from the OS...</Typography>
+      </Stack>
     );
   }
 
   if (isError || !data) {
     return (
-      <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-rose-200">
+      <Alert severity="error">
         {error instanceof Error ? error.message : "Failed to load processes"}
-      </div>
+      </Alert>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
-        <span className="rounded-full border border-border px-3 py-1">
-          Host: {data.host}
-        </span>
-        <span className="rounded-full border border-border px-3 py-1">
-          Platform: {data.platform}
-        </span>
-        <span className="rounded-full border border-border px-3 py-1">
-          Processes: {formatNumber(data.processes.length)}
-        </span>
-        <span className="rounded-full border border-border px-3 py-1">
-          Refresh: every {data.sampleIntervalMs / 1000}s
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1">
-          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-          Updated {new Date(dataUpdatedAt).toLocaleTimeString()}
-        </span>
-      </div>
+    <Stack spacing={2}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+        <Chip label={`Host: ${data.host}`} variant="outlined" />
+        <Chip label={`Platform: ${data.platform}`} variant="outlined" />
+        <Chip label={`User: ${data.currentUser}`} variant="outlined" />
+        <Chip label={`Processes: ${formatNumber(data.processes.length)}`} variant="outlined" />
+        <Chip label={`Refresh: every ${data.sampleIntervalMs / 1000}s`} variant="outlined" />
+        <Chip
+          icon={<RefreshIcon sx={{ fontSize: 16 }} />}
+          label={
+            <span suppressHydrationWarning>
+              {`Updated ${new Date(dataUpdatedAt).toLocaleTimeString()}`}
+            </span>
+          }
+          variant="outlined"
+          color={isFetching ? "primary" : "default"}
+        />
+      </Stack>
 
-      <ProcessSearchBar
-        matchedCount={matchedCount}
-        totalCount={totalCount}
-        isFiltering={isFiltering}
-      />
+      <ProcessSearchBar />
+      <ProcessFilters matchedCount={matchedCount} totalCount={totalCount} />
 
-      <ProcessTable
-        processes={filteredProcesses}
-        searchQuery={debouncedQuery}
-        isFiltering={isFiltering}
-      />
-    </div>
+      <Tabs
+        value={viewMode}
+        onChange={(_event, value) => setViewMode(value)}
+        aria-label="process dashboard views"
+      >
+        <Tab icon={<TableRowsIcon />} iconPosition="start" label="Table" value="table" />
+        <Tab icon={<AccountTreeIcon />} iconPosition="start" label="Tree" value="tree" />
+      </Tabs>
+
+      {viewMode === "table" ? (
+        <ProcessTable
+          processes={filteredProcesses}
+          searchQuery={debouncedSearch}
+          hasActiveFilters={hasActiveFilters}
+        />
+      ) : (
+        <ProcessTreeView processes={filteredProcesses} />
+      )}
+
+      <ProcessDetailDrawer processes={data.processes} />
+    </Stack>
   );
 }

@@ -33,6 +33,7 @@ export const processListSnapshotSchema = z.object({
   timestamp: z.string().datetime(),
   host: z.string(),
   platform: z.enum(["darwin", "linux", "win32", "aix", "freebsd", "openbsd", "sunos"]),
+  currentUser: z.string(),
   sampleIntervalMs: z.number().int().positive(),
   processes: z.array(processSchema),
 });

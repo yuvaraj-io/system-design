@@ -31,3 +31,10 @@ export function formatUptime(seconds: number) {
 export function formatDateTime(isoString: string) {
   return new Date(isoString).toLocaleString();
 }
+
+export const PROCESS_NAME_MAX_LENGTH = 60;
+
+export function truncateText(text: string, maxLength = PROCESS_NAME_MAX_LENGTH) {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}…`;
+}

@@ -1,3 +1,5 @@
+import Box from "@mui/material/Box";
+
 interface HighlightTextProps {
   text: string;
   query: string;
@@ -23,7 +25,17 @@ export function HighlightText({ text, query }: HighlightTextProps) {
   return (
     <>
       {before}
-      <mark className="rounded bg-amber-400/25 px-0.5 text-amber-100">{match}</mark>
+      <Box
+        component="mark"
+        sx={{
+          bgcolor: "warning.light",
+          color: "warning.contrastText",
+          px: 0.25,
+          borderRadius: 0.5,
+        }}
+      >
+        {match}
+      </Box>
       {after}
     </>
   );

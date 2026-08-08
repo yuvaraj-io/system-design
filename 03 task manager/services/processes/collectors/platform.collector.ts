@@ -198,8 +198,7 @@ async function listDarwinProcesses(): Promise<Process[]> {
     .split("\n")
     .slice(1)
     .map((line) => parseDarwinLine(line, threadCounts))
-    .filter((process): process is Process => process !== null)
-    .sort((a, b) => b.metrics.cpuPercent - a.metrics.cpuPercent);
+    .filter((process): process is Process => process !== null);
 }
 
 async function listLinuxProcesses(): Promise<Process[]> {
@@ -213,8 +212,7 @@ async function listLinuxProcesses(): Promise<Process[]> {
     .split("\n")
     .slice(1)
     .map(parseLinuxLine)
-    .filter((process): process is Process => process !== null)
-    .sort((a, b) => b.metrics.cpuPercent - a.metrics.cpuPercent);
+    .filter((process): process is Process => process !== null);
 }
 
 export class DarwinCollector implements ProcessCollector {
@@ -225,6 +223,7 @@ export class DarwinCollector implements ProcessCollector {
       timestamp: new Date().toISOString(),
       host: os.hostname(),
       platform: "darwin",
+      currentUser: os.userInfo().username,
       sampleIntervalMs: SAMPLE_INTERVAL_MS,
       processes,
     };
@@ -239,6 +238,7 @@ export class LinuxCollector implements ProcessCollector {
       timestamp: new Date().toISOString(),
       host: os.hostname(),
       platform: "linux",
+      currentUser: os.userInfo().username,
       sampleIntervalMs: SAMPLE_INTERVAL_MS,
       processes,
     };
