@@ -4,6 +4,8 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import TableRowsIcon from "@mui/icons-material/TableRows";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import Alert from "@mui/material/Alert";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "@mui/material/Stack";
@@ -26,6 +28,8 @@ export function ProcessDashboardClient() {
 
   const viewMode = useUiStore((state) => state.viewMode);
   const setViewMode = useUiStore((state) => state.setViewMode);
+  const refreshMode = useUiStore((state) => state.refreshMode);
+  const setRefreshMode = useUiStore((state) => state.setRefreshMode);
 
   const {
     debouncedSearch,
@@ -70,10 +74,27 @@ export function ProcessDashboardClient() {
           variant="outlined"
           color={isFetching ? "primary" : "default"}
         />
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={refreshMode}
+          onChange={(_event, value) => value && setRefreshMode(value)}
+        >
+          <ToggleButton value="polling">Polling</ToggleButton>
+          <ToggleButton value="sse">SSE</ToggleButton>
+        </ToggleButtonGroup>
       </Stack>
 
       <ProcessSearchBar />
       <ProcessFilters matchedCount={matchedCount} totalCount={totalCount} />
+
+      <Alert severity="info" sx={{ py: 0.5 }}>
+        <Typography variant="body2">
+          <strong>Phase 10:</strong> Use <em>Polling</em> (HTTP every 1s) or <em>SSE</em> (server push
+          via <code>/api/processes/stream</code>). Polling is simpler; SSE keeps one connection open
+          and pushes snapshots.
+        </Typography>
+      </Alert>
 
       <Tabs
         value={viewMode}

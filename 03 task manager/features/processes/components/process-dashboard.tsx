@@ -10,13 +10,14 @@ export function ProcessDashboard() {
       <Stack direction="row" spacing={2} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
         <Box>
           <Typography variant="overline" color="primary">
-            Phase 7
+            Phases 7–10
           </Typography>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>
             Process Explorer
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 1, maxWidth: 720 }}>
-            Browse all processes by default, inspect details on click, and explore parent-child trees.
+            Browse processes, inspect deep details, control processes, and switch between polling
+            and SSE realtime updates.
           </Typography>
         </Box>
         <MemoryIcon color="primary" sx={{ fontSize: 40 }} />
