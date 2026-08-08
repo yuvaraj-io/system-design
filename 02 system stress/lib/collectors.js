@@ -119,6 +119,147 @@ async function getSystemThreadCount() {
   }
 }
 
+function createEmptyThreadStates() {
+  return {
+    running: 0,
+    sleeping: 0,
+    waiting: 0,
+    stopped: 0,
+    zombie: 0,
+    idle: 0,
+    other: 0,
+    total: 0,
+  };
+}
+
+function bumpThreadState(states, code) {
+  switch (code) {
+    case "R":
+      states.running += 1;
+      break;
+    case "S":
+      states.sleeping += 1;
+      break;
+    case "D":
+      states.waiting += 1;
+      break;
+    case "T":
+      states.stopped += 1;
+      break;
+    case "Z":
+      states.zombie += 1;
+      break;
+    case "I":
+      states.idle += 1;
+      break;
+    default:
+      states.other += 1;
+      break;
+  }
+
+  states.total += 1;
+}
+
+function parseThreadStatesFromPsM(stdout) {
+  const states = createEmptyThreadStates();
+  const lines = stdout.trim().split("\n").slice(1);
+
+  for (const line of lines) {
+    const match = line.match(/([0-9]+\.[0-9]+)\s+([RISZT])\s/);
+    if (match) {
+      bumpThreadState(states, match[2]);
+    }
+  }
+
+  return states;
+}
+
+async function getLinuxThreadStatesFromProc() {
+  const states = createEmptyThreadStates();
+
+  try {
+    const { stdout } = await execFileAsync("sh", [
+      "-c",
+      "for f in /proc/[0-9]*/task/*/stat; do awk '{print $3}' \"$f\" 2>/dev/null; done",
+    ]);
+
+    for (const code of stdout.trim().split("\n")) {
+      if (!code) continue;
+      bumpThreadState(states, code.charAt(0));
+    }
+  } catch {
+    return null;
+  }
+
+  return states;
+}
+
+async function getSystemThreadStates() {
+  if (process.platform === "linux") {
+    return getLinuxThreadStatesFromProc();
+  }
+
+  if (process.platform === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("ps", ["-axM"]);
+      return parseThreadStatesFromPsM(stdout);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function getProcessThreadStates(pid = process.pid) {
+  try {
+    if (process.platform === "darwin" || process.platform === "linux") {
+      const { stdout } = await execFileAsync("ps", ["-M", String(pid)]);
+      return parseThreadStatesFromPsM(stdout);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function getThreadLimits() {
+  const cpuCores = getCoreCount();
+
+  if (process.platform === "linux") {
+    try {
+      const { stdout } = await execFileAsync("cat", ["/proc/sys/kernel/threads-max"]);
+      const maxThreads = Number(stdout.trim());
+      return {
+        cpuCores,
+        maxThreads: Number.isFinite(maxThreads) ? maxThreads : null,
+        maxProcesses: null,
+        note: "Linux kernel thread ceiling",
+      };
+    } catch {
+      return { cpuCores, maxThreads: null, maxProcesses: null, note: null };
+    }
+  }
+
+  if (process.platform === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("sysctl", ["-n", "kern.maxproc"]);
+      const maxProcesses = Number(stdout.trim());
+      return {
+        cpuCores,
+        maxThreads: null,
+        maxProcesses: Number.isFinite(maxProcesses) ? maxProcesses : null,
+        note: "macOS has no single system-wide thread pool; threads are created per process",
+      };
+    } catch {
+      return { cpuCores, maxThreads: null, maxProcesses: null, note: null };
+    }
+  }
+
+  return { cpuCores, maxThreads: null, maxProcesses: null, note: null };
+}
+
 async function getProcessThreadCount() {
   try {
     if (process.platform === "darwin" || process.platform === "linux") {
@@ -134,15 +275,44 @@ async function getProcessThreadCount() {
 }
 
 export async function getThreadInfo() {
-  const [systemThreadCount, processThreadCount, activeHandles] = await Promise.all([
+  const [
+    systemThreadCount,
+    processThreadCount,
+    systemStates,
+    processStates,
+    limits,
+    activeHandles,
+  ] = await Promise.all([
     getSystemThreadCount(),
     getProcessThreadCount(),
+    getSystemThreadStates(),
+    getProcessThreadStates(),
+    getThreadLimits(),
     Promise.resolve(process._getActiveHandles?.().length ?? null),
   ]);
+
+  const sampledSystemStates = systemStates?.total ?? 0;
+  const hiddenSystemThreads =
+    systemThreadCount != null && sampledSystemStates > 0
+      ? Math.max(0, systemThreadCount - sampledSystemStates)
+      : null;
+
+  const maxThreads = limits.maxThreads;
+  const availableThreads =
+    maxThreads != null && systemThreadCount != null
+      ? Math.max(0, maxThreads - systemThreadCount)
+      : null;
 
   return {
     systemThreadCount,
     processThreadCount,
+    systemStates,
+    processStates,
+    hiddenSystemThreads,
+    limits: {
+      ...limits,
+      availableThreads,
+    },
     nodeProcessActiveHandles: activeHandles,
     nodeProcessActiveRequests: process._getActiveRequests?.().length ?? null,
   };

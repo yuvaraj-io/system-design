@@ -15,8 +15,22 @@ function formatPercent(value) {
   return `${Number(value ?? 0).toFixed(1)}%`;
 }
 
+function formatCount(value) {
+  return value == null ? "N/A" : value.toLocaleString();
+}
+
 function formatGB(value) {
   return `${Number(value ?? 0).toFixed(2)} GB`;
+}
+
+function ThreadStatRow({ label, value, hint }) {
+  return (
+    <div className="thread-stat-row">
+      <span>{label}</span>
+      <strong>{formatCount(value)}</strong>
+      {hint ? <em>{hint}</em> : null}
+    </div>
+  );
 }
 
 function UtilBar({ percent, variant }) {
@@ -119,7 +133,11 @@ export default function HomePage() {
   }
 
   const stress = data?.stress;
-  const processThreads = data?.threads.processThreadCount;
+  const threads = data?.threads;
+  const processThreads = threads?.processThreadCount;
+  const processStates = threads?.processStates;
+  const systemStates = threads?.systemStates;
+  const threadLimits = threads?.limits;
   const threadDelta =
     baselineThreads != null && processThreads != null
       ? processThreads - baselineThreads
@@ -245,42 +263,99 @@ export default function HomePage() {
               <p className="metric-value">
                 {data ? formatGB(data.disk.usedGB) : "—"}
               </p>
-              <p className="metric-sub">
-                {data
-                  ? `${formatPercent(data.disk.utilizationPercent)} of ${formatGB(data.disk.totalGB)} on ${data.disk.path}`
-                  : "—"}
-              </p>
+              {data ? (
+                <div className="metric-detail">
+                  <span>{formatPercent(data.disk.utilizationPercent)} used</span>
+                  <span>{formatGB(data.disk.freeGB)} free</span>
+                  <span>{formatGB(data.disk.totalGB)} total</span>
+                  <span className="metric-chip">{data.disk.path}</span>
+                </div>
+              ) : (
+                <p className="metric-sub">—</p>
+              )}
               <UtilBar percent={data?.disk.utilizationPercent} variant="disk" />
-              <p className="metric-sub">
+              <p className="metric-footer">
                 {stress?.stats.storageAllocatedMB
                   ? `Stress app holding ${stress.stats.storageAllocatedMB} MB in ${stress.stats.storageFiles} files`
                   : "No storage allocated by stress app"}
               </p>
             </div>
+          </div>
 
-            <div className="metric-card">
-              <h3>Threads</h3>
-              <p className="metric-value">
-                {processThreads == null ? "N/A" : processThreads.toLocaleString()}
-              </p>
-              <p className="metric-sub">
-                Threads in this Node app
-                {threadDelta != null && threadDelta !== 0
-                  ? ` (${threadDelta > 0 ? "+" : ""}${threadDelta} since page load)`
-                  : ""}
-              </p>
-              <p className="metric-sub">
-                System-wide:{" "}
-                {data?.threads.systemThreadCount == null
-                  ? "N/A"
-                  : data.threads.systemThreadCount.toLocaleString()}
-              </p>
-              <p className="metric-sub">
+          <div className="metric-card metric-card-threads">
+            <h3>Threads</h3>
+
+              <div className="thread-section">
+                <p className="thread-section-title">This Node app</p>
+                <p className="metric-value">{formatCount(processThreads)}</p>
+                <p className="metric-sub">
+                  Total threads in this process
+                  {threadDelta != null && threadDelta !== 0
+                    ? ` (${threadDelta > 0 ? "+" : ""}${threadDelta} since page load)`
+                    : ""}
+                </p>
+                <div className="thread-stats">
+                  <ThreadStatRow label="Running" value={processStates?.running} />
+                  <ThreadStatRow label="Sleeping" value={processStates?.sleeping} />
+                  <ThreadStatRow label="Waiting" value={processStates?.waiting} />
+                </div>
+              </div>
+
+              <div className="thread-section">
+                <p className="thread-section-title">System-wide (all apps + OS)</p>
+                <p className="metric-value">{formatCount(threads?.systemThreadCount)}</p>
+                <p className="metric-sub">Total threads alive right now</p>
+                <div className="thread-stats">
+                  <ThreadStatRow label="Running" value={systemStates?.running} />
+                  <ThreadStatRow label="Sleeping" value={systemStates?.sleeping} />
+                  <ThreadStatRow label="Idle" value={systemStates?.idle} />
+                  <ThreadStatRow label="Waiting (I/O)" value={systemStates?.waiting} />
+                  {threads?.hiddenSystemThreads != null && threads.hiddenSystemThreads > 0 ? (
+                    <ThreadStatRow
+                      label="Kernel / hidden"
+                      value={threads.hiddenSystemThreads}
+                      hint="not listed by ps on macOS"
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="thread-section">
+                <p className="thread-section-title">Limits</p>
+                <div className="thread-stats">
+                  <ThreadStatRow
+                    label="CPU cores (max parallel)"
+                    value={threadLimits?.cpuCores}
+                    hint="threads that can run on CPU at once"
+                  />
+                  {threadLimits?.maxThreads != null ? (
+                    <>
+                      <ThreadStatRow
+                        label="Kernel max threads"
+                        value={threadLimits.maxThreads}
+                      />
+                      <ThreadStatRow
+                        label="Available headroom"
+                        value={threadLimits.availableThreads}
+                      />
+                    </>
+                  ) : (
+                    <ThreadStatRow
+                      label="Max processes (macOS)"
+                      value={threadLimits?.maxProcesses}
+                    />
+                  )}
+                </div>
+                {threadLimits?.note ? (
+                  <p className="metric-sub thread-note">{threadLimits.note}</p>
+                ) : null}
+              </div>
+
+              <p className="metric-footer">
                 {stress?.stats.threadWorkersSpawned
                   ? `Stress workers running: ${stress.stats.threadWorkersSpawned}`
                   : "No stress workers running"}
               </p>
-            </div>
           </div>
 
           <div className="stress-stats">
